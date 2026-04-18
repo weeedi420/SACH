@@ -1,0 +1,13 @@
+project_id = "fyfsbkftnjnrcgtliwij"
+
+[functions.scrape-news]
+verify_jwt = false
+
+[functions.extract-claims]
+verify_jwt = false
+
+[functions.news-chat]
+verify_jwt = false
+
+[functions.self-heal]
+verify_jwt = false

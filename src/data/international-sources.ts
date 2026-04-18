@@ -1,0 +1,73 @@
+import { InternationalSource } from "./types";
+
+export const internationalSources: InternationalSource[] = [
+  {
+    id: "bbc",
+    name: "BBC News",
+    country: "United Kingdom",
+    bias: "independent",
+    credibility: 90,
+    language: ["English"],
+    type: "tv",
+    logo: "globe",
+    color: "#bb1919",
+  },
+  {
+    id: "aljazeera",
+    name: "Al Jazeera",
+    country: "Qatar",
+    bias: "independent",
+    credibility: 82,
+    language: ["English"],
+    type: "tv",
+    logo: "globe",
+    color: "#d4a843",
+  },
+  {
+    id: "reuters",
+    name: "Reuters",
+    country: "United Kingdom",
+    bias: "independent",
+    credibility: 94,
+    language: ["English"],
+    type: "online",
+    logo: "globe",
+    color: "#ff6600",
+  },
+  {
+    id: "ap",
+    name: "Associated Press",
+    country: "United States",
+    bias: "independent",
+    credibility: 93,
+    language: ["English"],
+    type: "online",
+    logo: "globe",
+    color: "#e60000",
+  },
+  {
+    id: "cnn",
+    name: "CNN",
+    country: "United States",
+    bias: "independent",
+    credibility: 75,
+    language: ["English"],
+    type: "tv",
+    logo: "globe",
+    color: "#cc0000",
+  },
+  {
+    id: "guardian",
+    name: "The Guardian",
+    country: "United Kingdom",
+    bias: "independent",
+    credibility: 85,
+    language: ["English"],
+    type: "online",
+    logo: "globe",
+    color: "#052962",
+  },
+];
+
+export const getInternationalSource = (id: string) =>
+  internationalSources.find((s) => s.id === id);

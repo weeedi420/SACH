@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 140 10% 98%;
+    --foreground: 160 30% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 30% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 30% 8%;
+
+    --primary: 152 69% 31%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 150 15% 93%;
+    --secondary-foreground: 160 30% 15%;
+
+    --muted: 150 10% 94%;
+    --muted-foreground: 160 10% 45%;
+
+    --accent: 150 15% 93%;
+    --accent-foreground: 160 30% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 15% 89%;
+    --input: 150 15% 89%;
+    --ring: 152 69% 31%;
+
+    --radius: 0.625rem;
+
+    --bias-establishment: 80 40% 45%;
+    --bias-government: 220 70% 55%;
+    --bias-opposition: 15 80% 55%;
+    --bias-independent: 170 60% 40%;
+    --bias-partisan: 280 50% 50%;
+
+    --sidebar-background: 150 15% 96%;
+    --sidebar-foreground: 160 30% 15%;
+    --sidebar-primary: 152 69% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 150 15% 93%;
+    --sidebar-accent-foreground: 160 30% 15%;
+    --sidebar-border: 150 15% 89%;
+    --sidebar-ring: 152 69% 31%;
+  }
+
+  .dark {
+    --background: 160 20% 5%;
+    --foreground: 140 10% 93%;
+
+    --card: 160 20% 8%;
+    --card-foreground: 140 10% 93%;
+
+    --popover: 160 20% 8%;
+    --popover-foreground: 140 10% 93%;
+
+    --primary: 152 69% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 15% 14%;
+    --secondary-foreground: 140 10% 90%;
+
+    --muted: 160 15% 14%;
+    --muted-foreground: 150 10% 55%;
+
+    --accent: 160 15% 14%;
+    --accent-foreground: 140 10% 90%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 15% 16%;
+    --input: 160 15% 16%;
+    --ring: 152 69% 40%;
+
+    --bias-establishment: 80 40% 50%;
+    --bias-government: 220 70% 60%;
+    --bias-opposition: 15 80% 60%;
+    --bias-independent: 170 60% 45%;
+    --bias-partisan: 280 50% 55%;
+
+    --sidebar-background: 160 20% 7%;
+    --sidebar-foreground: 140 10% 90%;
+    --sidebar-primary: 152 69% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 160 15% 14%;
+    --sidebar-accent-foreground: 140 10% 90%;
+    --sidebar-border: 160 15% 16%;
+    --sidebar-ring: 152 69% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Bottom tab bar safe area */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Add bottom padding on mobile so content isn't hidden behind tab bar */
+  @media (max-width: 767px) {
+    main {
+      padding-bottom: 4rem !important;
+    }
+  }
+
+  .font-urdu {
+    font-family: 'Noto Nastaliq Urdu', serif;
+  }
+}
