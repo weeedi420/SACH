@@ -730,11 +730,10 @@ const IMPORTANT_ENTITIES = new Set([
 
 function extractEntities(text: string): Set<string> {
   const ents = new Set<string>();
-  // Capitalized proper nouns (Title Case and ALL CAPS)
-  (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(w => ents.add(w.toLowerCase()));
-  (text.match(/\b[A-Z]{3,6}\b/g) || []).forEach(w => ents.add(w.toLowerCase())); // min 3 chars to skip "US", "UN"
   const lower = text.toLowerCase();
-  // Use word boundary matching to prevent "us" matching "focus", "war" matching "award", etc.
+  // ONLY match curated IMPORTANT_ENTITIES with word boundaries.
+  // Do NOT extract generic capitalized words — city names like "Islamabad" appear
+  // in nearly every Pakistan news article and create false story clusters.
   IMPORTANT_ENTITIES.forEach(e => {
     const re = new RegExp(`\\b${e}\\b`);
     if (re.test(lower)) ents.add(e);
