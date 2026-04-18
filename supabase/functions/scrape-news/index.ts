@@ -7,32 +7,59 @@ const corsHeaders = {
 };
 
 const NEWS_SOURCES = [
-  { id: "dawn", name: "Dawn", url: "https://www.dawn.com", bias: "anti-establishment", international: false, tier: 2 },
-  { id: "geo", name: "Geo News", url: "https://www.geo.tv", bias: "government", international: false, tier: 3 },
-  { id: "ary", name: "ARY News", url: "https://arynews.tv", bias: "opposition", international: false, tier: 3 },
-  { id: "express", name: "Express Tribune", url: "https://tribune.com.pk", bias: "independent", international: false, tier: 2 },
-  { id: "thenews", name: "The News International", url: "https://www.thenews.com.pk", bias: "government", international: false, tier: 3 },
+  // Pakistani outlets
+  { id: "dawn", name: "Dawn", url: "https://www.dawn.com", bias: "anti-establishment", international: false, tier: 1 },
+  { id: "geo", name: "Geo News", url: "https://www.geo.tv", bias: "government", international: false, tier: 2 },
+  { id: "ary", name: "ARY News", url: "https://arynews.tv", bias: "opposition", international: false, tier: 2 },
+  { id: "express", name: "Express Tribune", url: "https://tribune.com.pk", bias: "independent", international: false, tier: 1 },
+  { id: "thenews", name: "The News International", url: "https://www.thenews.com.pk", bias: "government", international: false, tier: 2 },
   { id: "samaa", name: "Samaa TV", url: "https://www.samaaenglish.tv", bias: "opposition", international: false, tier: 3 },
-  { id: "propakistani", name: "ProPakistani", url: "https://propakistani.pk", bias: "independent", international: false, tier: 3 },
+  { id: "nation", name: "The Nation", url: "https://www.nation.com.pk", bias: "government", international: false, tier: 3 },
+  { id: "dunyanews", name: "Dunya News", url: "https://dunyanews.tv", bias: "government", international: false, tier: 3 },
+  // International tier 1
   { id: "bbc", name: "BBC News", url: "https://www.bbc.co.uk/news", bias: "independent", international: true, tier: 1 },
   { id: "reuters", name: "Reuters", url: "https://www.reuters.com", bias: "independent", international: true, tier: 1 },
   { id: "aljazeera", name: "Al Jazeera", url: "https://www.aljazeera.com", bias: "independent", international: true, tier: 1 },
   { id: "ap", name: "Associated Press", url: "https://apnews.com", bias: "independent", international: true, tier: 1 },
-  { id: "guardian", name: "The Guardian", url: "https://www.theguardian.com", bias: "independent", international: true, tier: 2 },
+  { id: "guardian", name: "The Guardian", url: "https://www.theguardian.com", bias: "independent", international: true, tier: 1 },
+  // International tier 2
+  { id: "nyt", name: "New York Times", url: "https://www.nytimes.com", bias: "independent", international: true, tier: 2 },
+  { id: "dw", name: "Deutsche Welle", url: "https://www.dw.com", bias: "independent", international: true, tier: 2 },
+  { id: "france24", name: "France 24", url: "https://www.france24.com", bias: "independent", international: true, tier: 2 },
+  { id: "ndtv", name: "NDTV", url: "https://www.ndtv.com", bias: "independent", international: true, tier: 2 },
+  { id: "thehindu", name: "The Hindu", url: "https://www.thehindu.com", bias: "independent", international: true, tier: 2 },
+  { id: "middleeasteye", name: "Middle East Eye", url: "https://www.middleeasteye.net", bias: "independent", international: true, tier: 2 },
+  { id: "arabnews", name: "Arab News", url: "https://www.arabnews.com", bias: "government", international: true, tier: 2 },
+  { id: "bbc-mideast", name: "BBC Middle East", url: "https://www.bbc.co.uk/news/world/middle_east", bias: "independent", international: true, tier: 1 },
 ];
 
 const SOURCE_TIER: Record<string, number> = {};
 NEWS_SOURCES.forEach(s => { SOURCE_TIER[s.id] = s.tier; });
 
 const RSS_FEEDS: Record<string, string> = {
+  // Pakistani
   dawn: "https://www.dawn.com/feed",
   geo: "https://www.geo.tv/rss/1/0",
+  ary: "https://arynews.tv/feed/",
   express: "https://tribune.com.pk/feed/home",
-  bbc: "https://feeds.bbci.co.uk/news/world/asia/rss.xml",
+  thenews: "https://www.thenews.com.pk/rss/1/1",
+  samaa: "https://www.samaaenglish.tv/feed/",
+  nation: "https://www.nation.com.pk/rss/home",
+  dunyanews: "https://dunyanews.tv/en/rss/Pakistan",
+  // International — using broad world-news feeds so same events appear across sources
+  bbc: "https://feeds.bbci.co.uk/news/world/rss.xml",
+  "bbc-mideast": "https://feeds.bbci.co.uk/news/world/middle_east/rss.xml",
   aljazeera: "https://www.aljazeera.com/xml/rss/all.xml",
-  guardian: "https://www.theguardian.com/world/pakistan/rss",
+  guardian: "https://www.theguardian.com/world/rss",
   reuters: "https://www.reuters.com/rssFeed/worldNews",
   ap: "https://rsshub.app/apnews/topics/world-news",
+  nyt: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+  dw: "https://rss.dw.com/rdf/rss-en-world",
+  france24: "https://www.france24.com/en/rss",
+  ndtv: "https://feeds.feedburner.com/ndtvnews-world-news",
+  thehindu: "https://www.thehindu.com/news/international/?service=rss",
+  middleeasteye: "https://www.middleeasteye.net/rss",
+  arabnews: "https://www.arabnews.com/rss.xml",
 };
 
 interface ScrapedArticle {
@@ -1084,19 +1111,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (category === "other" && articles.length < 2) {
-        rejections.push({ title: articles[0].title, reason: "other-single-source" });
+      // Require at least 2 distinct outlets — single-source stories don't belong on the feed
+      if (sourceIds.length < 2) {
+        rejections.push({ title: articles[0].title, reason: "single-outlet" });
         storiesRejected++;
         continue;
       }
 
       const importanceScore = calculateImportanceV2(category, sourceIds, articles.length, 0, combinedText);
-
-      if (importanceScore < 4 && articles.length < 2) {
-        rejections.push({ title: articles[0].title, reason: `low-score-${importanceScore}` });
-        storiesRejected++;
-        continue;
-      }
 
       const maxContent = Math.max(...articles.map(a => a.content.length));
       if (maxContent < 100 && articles.length < 2) {

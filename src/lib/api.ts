@@ -155,11 +155,13 @@ export async function fetchStories(): Promise<NewsStory[]> {
 
   const stories = storiesData.map((story: any) => mapDbToStory(story, coveragesByStory[story.id] || []));
 
-  // Always return stories — processFeedStories is for ranking, not hard gating
-  const processedStories = processFeedStories(stories);
+  // Only show multi-source stories — filter to 3+ coverages, fallback to 2+ if slim
+  const multiSource = stories.filter(s => s.coverages.length >= 3);
+  const toProcess = multiSource.length >= 5 ? multiSource : stories.filter(s => s.coverages.length >= 2);
+
+  const processedStories = processFeedStories(toProcess.length > 0 ? toProcess : stories);
   if (processedStories.length > 0) return processedStories;
 
-  // If processFeedStories filtered everything, return all stories sorted by freshness
   if (stories.length > 0) {
     return [...stories].sort(
       (a, b) => getStoryFreshnessTimestamp(b) - getStoryFreshnessTimestamp(a)
