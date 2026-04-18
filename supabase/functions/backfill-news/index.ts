@@ -16,24 +16,41 @@ const corsHeaders = {
 const BACKFILL_TOPICS = [
   "pakistan politics government military",
   "pakistan economy imf rupee inflation",
-  "iran us ceasefire hormuz strait",
-  "israel gaza ceasefire war",
-  "pakistan india relations border",
+  "iran us ceasefire hormuz strait oil",
+  "israel gaza ceasefire war hostages",
+  "pakistan india relations kashmir border",
   "pakistan floods disaster relief",
-  "pakistan cricket team match",
+  "pakistan cricket team psl match",
   "middle east conflict diplomacy",
-  "pakistan china cpec investment",
-  "imran khan PTI arrest",
+  "pakistan china cpec investment belt road",
+  "imran khan PTI court verdict",
+  "pakistan army nawaz sharif government",
+  "ukraine russia war nato",
+  "trump sanctions tariffs",
+  "pakistan terror attack security",
+  "global economy recession trade",
 ];
 
 // Trusted domains to accept from GDELT results
 const TRUSTED_DOMAINS = new Set([
+  // Pakistani outlets
   "dawn.com","geo.tv","tribune.com.pk","thenews.com.pk","arynews.tv",
   "samaaenglish.tv","nation.com.pk","dunyanews.tv","propakistani.pk",
+  "arabnews.pk","gulfnews.com","pakistantoday.com.pk","dailytimes.com.pk",
+  "urdupoint.com","brecorder.com","businessrecorder.com",
+  // International wire/major outlets
   "bbc.com","bbc.co.uk","reuters.com","aljazeera.com","theguardian.com",
   "nytimes.com","apnews.com","france24.com","dw.com","ndtv.com",
-  "thehindu.com","middleeasteye.net","arabnews.com","arabnews.pk",
+  "thehindu.com","middleeasteye.net","arabnews.com",
   "ft.com","economist.com","foreignpolicy.com","bloomberg.com",
+  "washingtonpost.com","wsj.com","time.com","cnn.com","nbcnews.com",
+  "foxnews.com","abcnews.go.com","cbsnews.com","usatoday.com",
+  "politico.com","axios.com","theatlantic.com","vox.com",
+  "scmp.com","straitstimes.com","gulfnews.com","thenational.ae",
+  "indiatimes.com","hindustantimes.com","tribuneindia.com","scroll.in",
+  "rferl.org","euronews.com","independent.co.uk","telegraph.co.uk",
+  "express.co.uk","sky.com","channel4.com",
+  "trtworld.com","aa.com.tr","xinhua.net","globaltimes.cn",
 ]);
 
 // Source ID mapping from domain
@@ -42,11 +59,21 @@ function domainToSourceId(domain: string): string {
     "dawn.com": "dawn", "geo.tv": "geo", "tribune.com.pk": "express",
     "thenews.com.pk": "thenews", "arynews.tv": "ary", "samaaenglish.tv": "samaa",
     "nation.com.pk": "nation", "dunyanews.tv": "dunyanews",
+    "pakistantoday.com.pk": "paktoday", "dailytimes.com.pk": "dailytimes",
+    "brecorder.com": "brecorder", "businessrecorder.com": "brecorder",
     "bbc.com": "bbc", "bbc.co.uk": "bbc", "reuters.com": "reuters",
     "aljazeera.com": "aljazeera", "theguardian.com": "guardian",
     "nytimes.com": "nyt", "apnews.com": "ap", "france24.com": "france24",
     "dw.com": "dw", "ndtv.com": "ndtv", "thehindu.com": "thehindu",
     "middleeasteye.net": "middleeasteye", "arabnews.com": "arabnews",
+    "washingtonpost.com": "wapo", "wsj.com": "wsj", "bloomberg.com": "bloomberg",
+    "cnn.com": "cnn", "foxnews.com": "fox", "time.com": "time",
+    "foreignpolicy.com": "fp", "economist.com": "economist",
+    "trtworld.com": "trt", "scmp.com": "scmp", "gulfnews.com": "gulfnews",
+    "thenational.ae": "thenational", "hindustantimes.com": "ht",
+    "indiatimes.com": "toi", "tribuneindia.com": "tribindia",
+    "independent.co.uk": "independent", "telegraph.co.uk": "telegraph",
+    "rferl.org": "rfe", "euronews.com": "euronews",
   };
   for (const [d, id] of Object.entries(map)) {
     if (domain.includes(d)) return id;
@@ -55,7 +82,7 @@ function domainToSourceId(domain: string): string {
 }
 
 function isInternational(domain: string): boolean {
-  const pkDomains = ["dawn.com","geo.tv","tribune.com.pk","thenews.com.pk","arynews.tv","samaaenglish.tv","nation.com.pk","dunyanews.tv","propakistani.pk","arabnews.pk"];
+  const pkDomains = ["dawn.com","geo.tv","tribune.com.pk","thenews.com.pk","arynews.tv","samaaenglish.tv","nation.com.pk","dunyanews.tv","propakistani.pk","arabnews.pk","pakistantoday.com.pk","dailytimes.com.pk","brecorder.com","businessrecorder.com","urdupoint.com"];
   return !pkDomains.some(d => domain.includes(d));
 }
 
