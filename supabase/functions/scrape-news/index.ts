@@ -707,25 +707,25 @@ function getKeywords(text: string): Set<string> {
   return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2 && !stopwords.has(w)));
 }
 
-// Only include entities that are unlikely to appear as substrings of unrelated words.
-// Avoid short ambiguous strings like "us" (matches pronoun), "war" (matches "award"), "oil" (matches "broil").
+// Entities must be SPECIFIC enough to reliably identify the same story.
+// Avoid country/city names that appear in nearly every article on a Pakistan news site
+// (pakistan, islamabad, india, china — too common to be meaningful signals).
+// Focus on actors, events, and topics that uniquely identify a story cluster.
 const IMPORTANT_ENTITIES = new Set([
-  // Countries & leaders (full words, no short ambiguous ones)
-  "iran", "iranian", "trump", "israel", "israeli", "gaza", "palestine", "palestinian",
-  "india", "indian", "modi", "china", "chinese", "russia", "russian", "ukraine", "ukrainian",
-  "pakistan", "pakistani", "america", "american", "biden", "harris",
-  "netanyahu", "khamenei", "putin", "zelensky",
-  // Orgs & specific places (distinct enough to not false-positive)
-  "nato", "opec", "iaea", "hormuz", "tehran", "kabul", "islamabad",
-  "taliban", "afghanistan", "hamas", "hezbollah", "saudi", "riyadh",
-  // Specific conflict/event terms
-  "ceasefire", "nuclear", "missile", "airstrike", "sanctions", "blockade",
-  // Economy-specific
-  "inflation", "rupee", "petrol", "diesel",
-  // Pakistani politicians (distinctive names)
+  // Specific leaders & named actors
+  "trump", "netanyahu", "khamenei", "putin", "zelensky", "modi", "biden",
   "nawaz", "bilawal", "maryam", "shahbaz", "zardari", "munir",
-  // Sports (distinct)
-  "cricket", "olympics",
+  // Specific countries that are story subjects (not site's home country)
+  "iran", "iranian", "israel", "israeli", "ukraine", "ukrainian", "russia", "russian",
+  "afghanistan", "taliban",
+  // Specific orgs & flashpoint locations
+  "nato", "iaea", "opec", "hamas", "hezbollah", "hormuz", "tehran", "kabul",
+  // Specific event types (distinctive enough to co-occur only in same story)
+  "ceasefire", "nuclear", "airstrike", "sanctions", "blockade", "hostage",
+  // Economy specifics
+  "rupee", "petrol", "imf",
+  // Sports (specific tournaments)
+  "cricket", "olympics", "fifa",
 ]);
 
 function extractEntities(text: string): Set<string> {
@@ -1043,7 +1043,9 @@ Deno.serve(async (req) => {
       }).eq("id", storyId);
     }
 
-    // STEP 6: Cluster unmatched articles
+    // STEP 6: Cluster unmatched articles (complete-linkage)
+    // Complete-linkage: article j only joins a group if it matches ALL existing members.
+    // This prevents a chain of weak connections from merging unrelated articles.
     const grouped: number[][] = [];
     const assigned = new Set<number>();
 
@@ -1053,7 +1055,11 @@ Deno.serve(async (req) => {
       assigned.add(i);
       for (let j = i + 1; j < unmatched.length; j++) {
         if (assigned.has(j)) continue;
-        if (shouldMerge(unmatched[i].title, unmatched[i].summary, unmatched[j].title, unmatched[j].summary)) {
+        // Must match every existing group member (complete-linkage)
+        const mergesWithAll = group.every(k =>
+          shouldMerge(unmatched[k].title, unmatched[k].summary, unmatched[j].title, unmatched[j].summary)
+        );
+        if (mergesWithAll) {
           group.push(j);
           assigned.add(j);
         }
