@@ -707,32 +707,38 @@ function getKeywords(text: string): Set<string> {
   return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2 && !stopwords.has(w)));
 }
 
+// Only include entities that are unlikely to appear as substrings of unrelated words.
+// Avoid short ambiguous strings like "us" (matches pronoun), "war" (matches "award"), "oil" (matches "broil").
 const IMPORTANT_ENTITIES = new Set([
-  // Countries & leaders
+  // Countries & leaders (full words, no short ambiguous ones)
   "iran", "iranian", "trump", "israel", "israeli", "gaza", "palestine", "palestinian",
   "india", "indian", "modi", "china", "chinese", "russia", "russian", "ukraine", "ukrainian",
-  "pakistan", "pakistani", "us", "usa", "america", "american", "biden", "harris",
-  "netanyahu", "khamenei", "putin", "zelensky", "xi",
-  // Orgs & places
-  "nato", "imf", "un", "opec", "iaea", "hormuz", "strait", "tehran", "kabul", "islamabad",
+  "pakistan", "pakistani", "america", "american", "biden", "harris",
+  "netanyahu", "khamenei", "putin", "zelensky",
+  // Orgs & specific places (distinct enough to not false-positive)
+  "nato", "opec", "iaea", "hormuz", "tehran", "kabul", "islamabad",
   "taliban", "afghanistan", "hamas", "hezbollah", "saudi", "riyadh",
-  // Conflict & geo terms
-  "war", "ceasefire", "nuclear", "missile", "airstrike", "sanctions", "blockade",
-  "diplomacy", "talks", "negotiations", "hostage", "troops", "military",
-  // Economy
-  "oil", "inflation", "rupee", "dollar", "fuel", "petrol", "diesel", "gas", "imf", "debt",
-  // Pakistani politics
-  "nawaz", "imran", "bilawal", "maryam", "shahbaz", "zardari", "munir",
-  // Sports
-  "cricket", "psl", "icc", "fifa", "olympics",
+  // Specific conflict/event terms
+  "ceasefire", "nuclear", "missile", "airstrike", "sanctions", "blockade",
+  // Economy-specific
+  "inflation", "rupee", "petrol", "diesel",
+  // Pakistani politicians (distinctive names)
+  "nawaz", "bilawal", "maryam", "shahbaz", "zardari", "munir",
+  // Sports (distinct)
+  "cricket", "olympics",
 ]);
 
 function extractEntities(text: string): Set<string> {
   const ents = new Set<string>();
+  // Capitalized proper nouns (Title Case and ALL CAPS)
   (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(w => ents.add(w.toLowerCase()));
-  (text.match(/\b[A-Z]{2,6}\b/g) || []).forEach(w => ents.add(w.toLowerCase()));
+  (text.match(/\b[A-Z]{3,6}\b/g) || []).forEach(w => ents.add(w.toLowerCase())); // min 3 chars to skip "US", "UN"
   const lower = text.toLowerCase();
-  IMPORTANT_ENTITIES.forEach(e => { if (lower.includes(e)) ents.add(e); });
+  // Use word boundary matching to prevent "us" matching "focus", "war" matching "award", etc.
+  IMPORTANT_ENTITIES.forEach(e => {
+    const re = new RegExp(`\\b${e}\\b`);
+    if (re.test(lower)) ents.add(e);
+  });
   return ents;
 }
 
@@ -750,28 +756,30 @@ function entityOverlapCount(a: Set<string>, b: Set<string>): number {
 }
 
 function shouldMerge(titleA: string, summaryA: string, titleB: string, summaryB: string): boolean {
+  // Use title+summary for entity extraction (more signal)
   const entA = extractEntities(titleA + " " + summaryA);
   const entB = extractEntities(titleB + " " + summaryB);
   const entOverlap = entityOverlapCount(entA, entB);
 
-  // 2+ shared important entities = almost certainly the same story cluster
-  // e.g. both mention {iran, ceasefire} or {trump, hormuz}
+  // 2+ specific entities in BOTH articles = same story cluster
+  // e.g. {iran, ceasefire}, {israel, airstrike}, {pakistan, islamabad}
+  // This is strict enough: "iran" AND "ceasefire" only co-occur in the same war story
   if (entOverlap >= 2) return true;
 
-  // 1 shared entity + some title keyword overlap
-  // e.g. {iran} + titles share "war" or "talks"
+  // 1 shared entity + meaningful title keyword overlap (not just 1 random word)
   if (entOverlap >= 1) {
     const titleKwA = getKeywords(titleA);
     const titleKwB = getKeywords(titleB);
     const titleSim = jaccardSimilarity(titleKwA, titleKwB);
-    if (titleSim > 0.15) return true;
+    // Require at least 2 shared title keywords (titleSim > 0.20 typically means 2-3 shared words)
+    if (titleSim > 0.20) return true;
   }
 
-  // High title similarity alone (same event, same wording)
+  // Very high title similarity alone (identical story, slightly reworded)
   const titleKwA = getKeywords(titleA);
   const titleKwB = getKeywords(titleB);
   const titleSim = jaccardSimilarity(titleKwA, titleKwB);
-  if (titleSim > 0.42) return true;
+  if (titleSim > 0.45) return true;
 
   return false;
 }
