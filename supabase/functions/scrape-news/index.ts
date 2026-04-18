@@ -702,16 +702,28 @@ function calculateBias(sourceIds: string[]): Record<string, number> {
 
 // ============ KEYWORD / ENTITY / SIMILARITY ============
 function getKeywords(text: string): Set<string> {
-  const stopwords = new Set(["the","a","an","in","on","at","to","for","of","is","are","was","were","and","or","but","with","from","by","as","its","it","has","have","had","been","be","will","can","may","this","that","not","no","so","if","up","out","about","into","over","after","also","now","new","said","says","one","two","pakistan","pakistani","today","report","news"]);
+  // Note: "pakistan"/"pakistani" removed from stopwords — they're meaningful for topic matching
+  const stopwords = new Set(["the","a","an","in","on","at","to","for","of","is","are","was","were","and","or","but","with","from","by","as","its","it","has","have","had","been","be","will","can","may","this","that","not","no","so","if","up","out","about","into","over","after","also","now","new","said","says","one","two","today","report","news"]);
   return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2 && !stopwords.has(w)));
 }
 
 const IMPORTANT_ENTITIES = new Set([
-  "iran", "trump", "israel", "gaza", "palestine", "india", "modi", "china", "russia", "ukraine",
-  "nato", "imf", "un", "opec", "hormuz", "taliban", "afghanistan", "kabul", "tehran",
-  "saudi", "oil", "nuclear", "missile", "airstrike", "sanctions", "ceasefire", "diplomacy",
-  "inflation", "rupee", "dollar", "fuel", "petrol", "diesel", "gas",
-  "nawaz", "imran", "bilawal", "maryam", "shahbaz", "zardari",
+  // Countries & leaders
+  "iran", "iranian", "trump", "israel", "israeli", "gaza", "palestine", "palestinian",
+  "india", "indian", "modi", "china", "chinese", "russia", "russian", "ukraine", "ukrainian",
+  "pakistan", "pakistani", "us", "usa", "america", "american", "biden", "harris",
+  "netanyahu", "khamenei", "putin", "zelensky", "xi",
+  // Orgs & places
+  "nato", "imf", "un", "opec", "iaea", "hormuz", "strait", "tehran", "kabul", "islamabad",
+  "taliban", "afghanistan", "hamas", "hezbollah", "saudi", "riyadh",
+  // Conflict & geo terms
+  "war", "ceasefire", "nuclear", "missile", "airstrike", "sanctions", "blockade",
+  "diplomacy", "talks", "negotiations", "hostage", "troops", "military",
+  // Economy
+  "oil", "inflation", "rupee", "dollar", "fuel", "petrol", "diesel", "gas", "imf", "debt",
+  // Pakistani politics
+  "nawaz", "imran", "bilawal", "maryam", "shahbaz", "zardari", "munir",
+  // Sports
   "cricket", "psl", "icc", "fifa", "olympics",
 ]);
 
@@ -738,17 +750,30 @@ function entityOverlapCount(a: Set<string>, b: Set<string>): number {
 }
 
 function shouldMerge(titleA: string, summaryA: string, titleB: string, summaryB: string): boolean {
-  const titleKwA = getKeywords(titleA), titleKwB = getKeywords(titleB);
-  const titleSim = jaccardSimilarity(titleKwA, titleKwB);
   const entA = extractEntities(titleA + " " + summaryA);
   const entB = extractEntities(titleB + " " + summaryB);
-  const entSim = jaccardSimilarity(entA, entB);
   const entOverlap = entityOverlapCount(entA, entB);
-  const sumKwA = getKeywords(summaryA), sumKwB = getKeywords(summaryB);
-  const sumSim = jaccardSimilarity(sumKwA, sumKwB);
-  const score = titleSim * 0.5 + entSim * 0.3 + sumSim * 0.2;
-  // Lowered thresholds — news outlets cover the same event with different wording
-  return (score > 0.22 && entOverlap >= 1) || score > 0.32 || (titleSim > 0.35 && entOverlap >= 1);
+
+  // 2+ shared important entities = almost certainly the same story cluster
+  // e.g. both mention {iran, ceasefire} or {trump, hormuz}
+  if (entOverlap >= 2) return true;
+
+  // 1 shared entity + some title keyword overlap
+  // e.g. {iran} + titles share "war" or "talks"
+  if (entOverlap >= 1) {
+    const titleKwA = getKeywords(titleA);
+    const titleKwB = getKeywords(titleB);
+    const titleSim = jaccardSimilarity(titleKwA, titleKwB);
+    if (titleSim > 0.15) return true;
+  }
+
+  // High title similarity alone (same event, same wording)
+  const titleKwA = getKeywords(titleA);
+  const titleKwB = getKeywords(titleB);
+  const titleSim = jaccardSimilarity(titleKwA, titleKwB);
+  if (titleSim > 0.42) return true;
+
+  return false;
 }
 
 // ============ IMPORTANCE SCORING ============
