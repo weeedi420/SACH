@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -12,15 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install Supabase CLI
+        run: |
+          curl -fsSL https://github.com/supabase/cli/releases/download/v2.90.0/supabase_linux_amd64.tar.gz | tar xz
+          sudo mv supabase /usr/local/bin/supabase
 
       - name: Deploy edge functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase functions deploy scrape-news --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          supabase functions deploy scrape-news --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy extract-claims --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           supabase functions deploy self-heal --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           supabase functions deploy news-chat --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          supabase functions deploy backfill-news --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
