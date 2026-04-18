@@ -323,7 +323,9 @@ export default function StoryDetail() {
             const source = getSource(coverage.sourceId) || getInternationalSource(coverage.sourceId);
             const isExpanded = expandedCards.has(i);
             const cleanedContent = coverage.fullContent ? stripMarkdown(coverage.fullContent) : "";
-            const hasContent = cleanedContent.length > 100;
+            const cleanedSummary = coverage.summary ? stripMarkdown(coverage.summary) : "";
+            // Only show expandable content if it's meaningfully different from the summary
+            const hasContent = cleanedContent.length > 100 && cleanedContent.substring(0, 80) !== cleanedSummary.substring(0, 80);
             const preview = cleanedContent.substring(0, 500);
 
             return (

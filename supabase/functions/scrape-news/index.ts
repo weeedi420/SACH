@@ -532,15 +532,16 @@ async function summarizeStory(title: string, coverages: { headline: string; summ
   ).join("\n---\n");
 
   const text = await callAI(
-    `You are a neutral news editor for Sachhh. Write:
-1. A 2-3 paragraph editorial summary synthesizing all sources. Be factual, neutral.
-2. 4-6 key bullet points.
+    `You are a neutral news editor for Sachhh. Be extremely concise.
 Story: ${title}
 Coverage:
 ${coverageText}
+Write:
+1. A 3-4 sentence summary (max 70 words). State the core facts only. No filler, no padding, no repetition.
+2. 3-4 key bullet points (each under 15 words).
 Respond in EXACT JSON (no markdown):
-{"summary":"[2-3 paragraphs]","keyPoints":["point 1","point 2","point 3","point 4"]}`,
-    1800
+{"summary":"3-4 sentences max","keyPoints":["fact 1","fact 2","fact 3"]}`,
+    600
   );
   if (!text) return null;
   try {
@@ -746,7 +747,8 @@ function shouldMerge(titleA: string, summaryA: string, titleB: string, summaryB:
   const sumKwA = getKeywords(summaryA), sumKwB = getKeywords(summaryB);
   const sumSim = jaccardSimilarity(sumKwA, sumKwB);
   const score = titleSim * 0.5 + entSim * 0.3 + sumSim * 0.2;
-  return (score > 0.35 && entOverlap >= 2) || (score > 0.40 && (entOverlap >= 1 || titleSim > 0.45));
+  // Lowered thresholds — news outlets cover the same event with different wording
+  return (score > 0.22 && entOverlap >= 1) || score > 0.32 || (titleSim > 0.35 && entOverlap >= 1);
 }
 
 // ============ IMPORTANCE SCORING ============
