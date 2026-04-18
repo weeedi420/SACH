@@ -23,6 +23,7 @@ function estimateReadingTime(text: string): number {
 export default function StoryDetail() {
   const { id } = useParams();
   const [biasOpen, setBiasOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(true);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
 
   const { data: story, isLoading } = useQuery({
@@ -173,28 +174,38 @@ export default function StoryDetail() {
           className="space-y-4"
         >
           <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-primary" />
-                <div>
-                  <h2 className="text-base font-semibold">Story Overview</h2>
-                  <p className="text-[11px] text-muted-foreground">AI synthesis · read source coverage below</p>
+            <CardContent className="p-4 space-y-3">
+              <button
+                onClick={() => setOverviewOpen(o => !o)}
+                className="flex items-center justify-between w-full gap-2 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  <div>
+                    <h2 className="text-base font-semibold">Story Overview</h2>
+                    <p className="text-[11px] text-muted-foreground">AI synthesis · read source coverage below</p>
+                  </div>
                 </div>
-              </div>
-              <div className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-                {story.aiSummary}
-              </div>
-              {story.keyPoints && story.keyPoints.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-border">
-                  <h3 className="text-sm font-medium">Key Facts</h3>
-                  <ul className="space-y-1.5">
-                    {story.keyPoints.map((point, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
+                {overviewOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+              </button>
+              {overviewOpen && (
+                <div className="space-y-3">
+                  <div className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                    {story.aiSummary}
+                  </div>
+                  {story.keyPoints && story.keyPoints.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <h3 className="text-sm font-medium">Key Facts</h3>
+                      <ul className="space-y-1.5">
+                        {story.keyPoints.map((point, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -339,7 +350,7 @@ export default function StoryDetail() {
                   <CardContent className="p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{source?.name || coverage.sourceId}</span>
+                        <span className="font-medium text-sm">{source?.name || "Independent source"}</span>
                         {source && (
                           <span className="text-[10px] text-muted-foreground">
                             {source.credibility}% credibility
@@ -383,11 +394,16 @@ export default function StoryDetail() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between pt-1">
                       <span className="text-[10px] text-muted-foreground">{timeAgo(coverage.publishedAt)}</span>
                       {coverage.url && coverage.url !== "#" && (
-                        <a href={coverage.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                          Original <ExternalLink className="h-2.5 w-2.5" />
+                        <a
+                          href={coverage.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs border border-border rounded px-2 py-0.5 hover:bg-accent hover:text-accent-foreground transition-colors"
+                        >
+                          Read full article <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>

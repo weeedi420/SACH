@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { BiasIndicator } from "./BiasIndicator";
 import { NewsStory } from "@/data/types";
 import { getSource } from "@/data/sources";
+import { getInternationalSource } from "@/data/international-sources";
 import { timeAgo, getTopicColor, getBlindspotType } from "@/data/utils";
-import { Users, TrendingUp, EyeOff, Zap, Globe, Bookmark } from "lucide-react";
+import { TrendingUp, EyeOff, Zap, Globe, Bookmark, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { stripMarkdown } from "@/lib/markdown";
 import { useBookmarks } from "@/hooks/useBookmarks";
@@ -16,9 +17,22 @@ interface StoryCardProps {
   index: number;
 }
 
+function getOutletNames(story: NewsStory): string {
+  const names = story.coverages
+    .map(c => (getSource(c.sourceId) || getInternationalSource(c.sourceId))?.name)
+    .filter(Boolean) as string[];
+  const unique = [...new Set(names)];
+  if (unique.length === 0) return `${story.coverages.length} sources`;
+  if (unique.length <= 3) return unique.join(" · ");
+  return `${unique.slice(0, 2).join(" · ")} +${unique.length - 2}`;
+}
+
+function getReadTime(story: NewsStory): string {
+  const mins = Math.max(1, Math.round(story.coverages.length * 0.75));
+  return `~${mins} min read`;
+}
+
 export function StoryCard({ story, index }: StoryCardProps) {
-  const sourceCount = story.coverages.length;
-  const firstSource = getSource(story.coverages[0]?.sourceId);
   const blindspot = getBlindspotType(story.biasDistribution);
   const { user } = useAuth();
   const { toggleBookmark, isBookmarked } = useBookmarks();
@@ -33,7 +47,7 @@ export function StoryCard({ story, index }: StoryCardProps) {
       <Link to={`/story/${story.id}`}>
         <Card className="group hover:shadow-md hover:border-primary/30 transition-all cursor-pointer">
           <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="secondary" className={`text-[10px] ${getTopicColor(story.topic)}`}>
@@ -67,22 +81,29 @@ export function StoryCard({ story, index }: StoryCardProps) {
                 </h3>
 
                 {story.coverages[0]?.summary && (
-                  <p className="text-xs text-muted-foreground line-clamp-1">
+                  <p className="text-xs text-muted-foreground line-clamp-2">
                     {stripMarkdown(story.coverages[0].summary)}
                   </p>
                 )}
 
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    {sourceCount} sources
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+                  <span className="font-medium text-foreground/70">{getOutletNames(story)}</span>
+                  <span className="flex items-center gap-0.5">
+                    <Clock className="h-3 w-3" />{getReadTime(story)}
                   </span>
                   <span>{timeAgo(story.publishedAt)}</span>
-                  {firstSource && <span>via {firstSource.name}</span>}
                 </div>
 
                 <BiasIndicator distribution={story.biasDistribution} />
               </div>
+              {story.imageUrl && (
+                <img
+                  src={story.imageUrl}
+                  alt=""
+                  className="shrink-0 w-20 h-16 object-cover rounded-md bg-muted"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              )}
               {user && (
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleBookmark(story.id); }}

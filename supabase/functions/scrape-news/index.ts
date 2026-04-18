@@ -579,6 +579,30 @@ Respond in EXACT JSON (no markdown):
   } catch { return null; }
 }
 
+// ============ BASIC ARTICLE CONTENT FETCHER (no Firecrawl) ============
+// Fetches raw HTML and extracts article body text. Used when RSS content < 200 chars.
+// Max 5 fetches per scrape run (controlled by caller) to avoid timeouts.
+async function fetchArticleContent(url: string): Promise<string | null> {
+  if (!url || url === "#") return null;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Sachhh/1.0)" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    // Try <article> tag first, then fall back to full body
+    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    const raw = (articleMatch?.[1] || html)
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/\s{2,}/g, " ").trim();
+    return raw.length > 200 ? raw.substring(0, 3000) : null;
+  } catch { return null; }
+}
+
 // ============ RSS FETCHER ============
 async function fetchRssArticles(sourceId: string, feedUrl: string, source: typeof NEWS_SOURCES[0]): Promise<ScrapedArticle[]> {
   try {
@@ -942,7 +966,20 @@ Deno.serve(async (req) => {
 
     console.log(`After URL dedup: ${allArticles.length} new articles`);
 
-    // STEP 2.5: DETERMINISTIC QUALITY FILTER ON ALL ARTICLES (no AI needed)
+    // STEP 2.5: Fetch full article content for thin RSS articles (max 5 to avoid timeout)
+    let fetchCount = 0;
+    for (const article of allArticles) {
+      if (fetchCount >= 5) break;
+      if (article.content.length < 200 && article.url && article.url !== "#") {
+        const fetched = await fetchArticleContent(article.url);
+        if (fetched && fetched.length > article.content.length) {
+          article.content = fetched;
+          fetchCount++;
+        }
+      }
+    }
+
+    // STEP 3: DETERMINISTIC QUALITY FILTER ON ALL ARTICLES (no AI needed)
     // Clean content boilerplate before filtering
     allArticles.forEach((article) => normalizeArticle(article));
 
