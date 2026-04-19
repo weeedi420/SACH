@@ -133,7 +133,7 @@ export async function fetchStories(): Promise<NewsStory[]> {
     .gte("importance_score", 2)
     .order("importance_score", { ascending: false })
     .order("published_at", { ascending: false })
-    .limit(60);
+    .limit(120);
 
   const merged = new Map<string, any>();
   [...storiesData, ...(historicalStories || [])].forEach((story: any) => {
@@ -157,9 +157,8 @@ export async function fetchStories(): Promise<NewsStory[]> {
 
   const stories = storiesData.map((story: any) => mapDbToStory(story, coveragesByStory[story.id] || []));
 
-  // Only show multi-source stories — filter to 3+ coverages, fallback to 2+ if slim
-  const multiSource = stories.filter(s => s.coverages.length >= 3);
-  const toProcess = multiSource.length >= 5 ? multiSource : stories.filter(s => s.coverages.length >= 2);
+  // Show all multi-source stories — 2+ sources always, 3+ rank higher via coverage score
+  const toProcess = stories.filter(s => s.coverages.length >= 2);
 
   const processedStories = processFeedStories(toProcess.length > 0 ? toProcess : stories);
   if (processedStories.length > 0) return processedStories;

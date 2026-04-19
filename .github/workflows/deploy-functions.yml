@@ -13,17 +13,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Supabase CLI
+      - name: Check required secrets
         run: |
-          curl -fsSL https://github.com/supabase/cli/releases/download/v2.90.0/supabase_linux_amd64.tar.gz | tar xz
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "❌ SUPABASE_ACCESS_TOKEN secret is not set in GitHub repo settings"
+            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SUPABASE_PROJECT_REF }}" ]; then
+            echo "❌ SUPABASE_PROJECT_REF secret is not set in GitHub repo settings"
+            echo "Your project ref is: ravxdhdlvsnmcywhoczb"
+            exit 1
+          fi
+          echo "✅ Secrets are set"
+
+      - name: Install Supabase CLI (latest)
+        run: |
+          # Fetch latest release tag dynamically so we never hardcode a stale version
+          LATEST=$(curl -fsSL https://api.github.com/repos/supabase/cli/releases/latest \
+            | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+          echo "Installing Supabase CLI $LATEST"
+          curl -fsSL "https://github.com/supabase/cli/releases/download/${LATEST}/supabase_linux_amd64.tar.gz" \
+            | tar xz
           sudo mv supabase /usr/local/bin/supabase
+          supabase --version
 
       - name: Deploy edge functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase functions deploy scrape-news --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy extract-claims --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy self-heal --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy news-chat --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          supabase functions deploy backfill-news --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          REF="${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase functions deploy scrape-news   --project-ref "$REF" --no-verify-jwt
+          supabase functions deploy backfill-news --project-ref "$REF" --no-verify-jwt
+          supabase functions deploy news-chat     --project-ref "$REF"
+          supabase functions deploy extract-claims --project-ref "$REF"
+          supabase functions deploy self-heal     --project-ref "$REF"
+          echo "✅ All functions deployed"

@@ -328,8 +328,11 @@ Deno.serve(async (req) => {
       const arts = group.map(i => filtered[i]);
       const sourceIds = [...new Set(arts.map(a => a.sourceId))];
 
-      // Require 2+ distinct outlets
-      if (sourceIds.length < 2) { storiesRejected++; continue; }
+      // For historical backfill (offset > 0), allow single-source stories so we
+      // fill the database — they rank low (importance 4) and serve as context.
+      // For recent data (offset=0), require 2+ outlets for quality.
+      const minSources = offsetWeeks > 0 ? 1 : 2;
+      if (sourceIds.length < minSources) { storiesRejected++; continue; }
 
       const category = classifyCategory(arts[0].title);
       if (category === "entertainment") { storiesRejected++; continue; }
@@ -337,6 +340,10 @@ Deno.serve(async (req) => {
       const combinedText = arts.map(a => a.title).join(" ");
       const topic = detectTopic(combinedText);
       const pubDate = arts.map(a => a.publishedAt).sort()[0]; // oldest article date
+
+      // Importance: 2+ sources → 6-10, 1 source → 4 (shows in feed but ranked lower)
+      const importanceScore = sourceIds.length >= 3 ? Math.min(10, sourceIds.length * 2 + 2)
+        : sourceIds.length === 2 ? 6 : 4;
 
       // Create story
       const { data: story, error: storyErr } = await supabase.from("stories").insert({
@@ -346,7 +353,7 @@ Deno.serve(async (req) => {
         is_trending: sourceIds.length >= 3,
         bias_distribution: { establishment: 0, government: 0, opposition: 0, independent: sourceIds.length },
         published_at: pubDate,
-        importance_score: Math.min(10, sourceIds.length * 2 + 2),
+        importance_score: importanceScore,
         is_breaking: false,
       }).select("id").single();
 
