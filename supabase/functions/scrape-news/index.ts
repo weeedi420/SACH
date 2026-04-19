@@ -274,13 +274,43 @@ function hasLowSignalLead(text: string): boolean {
   return LOW_SIGNAL_LEAD_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+// Detect if text looks like navigation/boilerplate garbage rather than article text
+function looksLikeGarbage(text: string): boolean {
+  if (!text || text.length < 20) return true;
+  const lower = text.toLowerCase();
+  // Very short with no sentence punctuation → probably a nav link or heading
+  if (text.length < 80 && !/[.!?]/.test(text)) return true;
+  // High density of nav/UI words in a short text
+  const navWords = ["developer", "subscribe", "newsletter", "cookie", "sign in", "log in", "register", "follow us", "contact us", "advertise", "privacy policy", "terms of service", "copyright", "all rights reserved", "click here", "read more", "view all", "see more", "load more"];
+  const hits = navWords.filter(w => lower.includes(w)).length;
+  if (hits >= 2) return true;
+  // Ratio of short "words" (1-2 chars) is too high — likely menu links or symbols
+  const words = text.split(/\s+/);
+  const shortWords = words.filter(w => w.length <= 2).length;
+  if (words.length > 5 && shortWords / words.length > 0.5) return true;
+  return false;
+}
+
 function normalizeArticle(article: ScrapedArticle): void {
   article.title = stripTitleSuffix(decodeHtmlEntities(article.title || ""));
   article.summary = stripLeadCaption(cleanBoilerplate(article.summary || ""));
   article.content = stripLeadCaption(cleanBoilerplate(article.content || ""));
 
+  // If summary looks like garbage, clear it so we fall back to title
+  if (looksLikeGarbage(article.summary)) {
+    article.summary = "";
+  }
+  // If content looks like garbage, clear it
+  if (looksLikeGarbage(article.content)) {
+    article.content = "";
+  }
+
   if (!article.summary && article.content) {
     article.summary = article.content.substring(0, 500);
+  }
+  // Last resort: use title as summary so there's always something readable
+  if (!article.summary) {
+    article.summary = article.title;
   }
 }
 
@@ -602,8 +632,8 @@ Respond in EXACT JSON (no markdown):
 }
 
 // ============ BASIC ARTICLE CONTENT FETCHER (no Firecrawl) ============
-// Fetches raw HTML and extracts article body text. Used when RSS content < 200 chars.
-// Max 5 fetches per scrape run (controlled by caller) to avoid timeouts.
+// Extracts <p> tag text from <article>/<main> only — never falls back to full body.
+// This naturally skips nav menus, footers, sidebars, cookie banners, etc.
 async function fetchArticleContent(url: string): Promise<string | null> {
   if (!url || url === "#") return null;
   try {
@@ -613,15 +643,48 @@ async function fetchArticleContent(url: string): Promise<string | null> {
     });
     if (!res.ok) return null;
     const html = await res.text();
-    // Try <article> tag first, then fall back to full body
-    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-    const raw = (articleMatch?.[1] || html)
+
+    // Strip scripts and styles first
+    const stripped = html
       .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-      .replace(/\s{2,}/g, " ").trim();
-    return raw.length > 200 ? raw.substring(0, 3000) : null;
+      .replace(/<style[\s\S]*?<\/style>/gi, "");
+
+    // Try to find a content container: <article>, <main>, or common class patterns
+    const containerPatterns = [
+      /<article[^>]*>([\s\S]*?)<\/article>/i,
+      /<main[^>]*>([\s\S]*?)<\/main>/i,
+      /<div[^>]*class="[^"]*(?:article|story|post|content|body)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    ];
+    let container = "";
+    for (const pattern of containerPatterns) {
+      const m = stripped.match(pattern);
+      if (m?.[1]) { container = m[1]; break; }
+    }
+
+    // Only extract <p> tags — this skips nav/headers/footers/sidebars/buttons
+    const target = container || "";
+    if (!target) return null; // No container found — skip, don't use full body
+
+    const paragraphs: string[] = [];
+    const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let m;
+    while ((m = pRegex.exec(target)) !== null) {
+      const text = m[1]
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+        .replace(/&#([0-9]+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+        .replace(/\s{2,}/g, " ").trim();
+      // Only keep paragraphs that look like actual sentences (40+ chars, has lowercase letters)
+      if (text.length >= 40 && /[a-z]{3,}/.test(text) && /[.!?,]/.test(text)) {
+        paragraphs.push(text);
+      }
+    }
+
+    if (paragraphs.length === 0) return null;
+    const content = paragraphs.join(" ");
+    return content.length > 150 ? content.substring(0, 3000) : null;
   } catch { return null; }
 }
 

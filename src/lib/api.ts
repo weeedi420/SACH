@@ -109,35 +109,37 @@ function mapDbToStory(row: DbStory, coverages: DbCoverage[]): NewsStory {
 }
 
 export async function fetchStories(): Promise<NewsStory[]> {
-  const { data: primaryStories, error: storiesErr } = await supabase
+  // Fetch recent stories first (last 7 days) — these are the freshest
+  const { data: recentStories, error: storiesErr } = await supabase
     .from("stories")
     .select("*")
-    .gte("published_at", new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString())
-    .gte("importance_score", 3)
+    .gte("published_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .gte("importance_score", 2)
     .order("importance_score", { ascending: false })
     .order("published_at", { ascending: false })
     .limit(80);
 
   if (storiesErr) return [];
 
-  let storiesData = primaryStories || [];
+  let storiesData = recentStories || [];
 
-  if (storiesData.length < 8) {
-    const { data: backupStories } = await supabase
-      .from("stories")
-      .select("*")
-      .gte("published_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-      .gte("importance_score", 1)
-      .order("importance_score", { ascending: false })
-      .order("published_at", { ascending: false })
-      .limit(120);
+  // Always also load historical backfill stories (up to 90 days)
+  // so the feed has depth even when fresh scrapes are sparse
+  const { data: historicalStories } = await supabase
+    .from("stories")
+    .select("*")
+    .lt("published_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .gte("published_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+    .gte("importance_score", 2)
+    .order("importance_score", { ascending: false })
+    .order("published_at", { ascending: false })
+    .limit(60);
 
-    const merged = new Map<string, any>();
-    [...storiesData, ...(backupStories || [])].forEach((story: any) => {
-      if (!merged.has(story.id)) merged.set(story.id, story);
-    });
-    storiesData = Array.from(merged.values());
-  }
+  const merged = new Map<string, any>();
+  [...storiesData, ...(historicalStories || [])].forEach((story: any) => {
+    if (!merged.has(story.id)) merged.set(story.id, story);
+  });
+  storiesData = Array.from(merged.values());
 
   if (storiesData.length === 0) return [];
 
@@ -262,15 +264,12 @@ function mergeStoryCoverages(stories: NewsStory[]): ArticleCoverage[] {
 
 function processFeedStories(stories: NewsStory[]): NewsStory[] {
   const now = Date.now();
-  const freshnessHours = 72;
 
   const candidates = stories.filter((story) => {
-    if ((story.importanceScore || 0) < 3) return false;
+    if ((story.importanceScore || 0) < 2) return false;
     if (GALLERY_PATTERNS.some((pattern) => pattern.test(story.title))) return false;
     if (ENTERTAINMENT_PATTERNS.some((pattern) => pattern.test(story.title))) return false;
-
-    const ageHours = (now - getStoryFreshnessTimestamp(story)) / (1000 * 60 * 60);
-    return ageHours <= freshnessHours;
+    return true;
   });
 
   const groups: Array<{ primary: NewsStory; keywords: string[]; members: NewsStory[] }> = [];
@@ -326,8 +325,8 @@ function processFeedStories(stories: NewsStory[]): NewsStory[] {
     const breakingA = a.isBreaking ? 50 : 0;
     const breakingB = b.isBreaking ? 50 : 0;
 
-    const recencyA = hoursA < 6 ? 10 : hoursA < 12 ? 7 : hoursA < 24 ? 4 : hoursA < 48 ? 1 : 0;
-    const recencyB = hoursB < 6 ? 10 : hoursB < 12 ? 7 : hoursB < 24 ? 4 : hoursB < 48 ? 1 : 0;
+    const recencyA = hoursA < 6 ? 10 : hoursA < 12 ? 7 : hoursA < 24 ? 4 : hoursA < 48 ? 2 : hoursA < 168 ? 1 : 0;
+    const recencyB = hoursB < 6 ? 10 : hoursB < 12 ? 7 : hoursB < 24 ? 4 : hoursB < 48 ? 2 : hoursB < 168 ? 1 : 0;
 
     const coverageA = Math.log2(a.coverages.length + 1) * 5;
     const coverageB = Math.log2(b.coverages.length + 1) * 5;
