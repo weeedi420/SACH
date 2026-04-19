@@ -31,8 +31,23 @@ const VIDEO_UI_JUNK = new Set([
   "info", "listen", "cancel",
 ]);
 
+export function decodeEntities(text: string): string {
+  if (!text) return "";
+  let t = text
+    .replace(/&mdash;/g, " — ").replace(/&ndash;/g, "–")
+    .replace(/&nbsp;/g, " ").replace(/&apos;|&#039;/g, "'")
+    .replace(/&quot;/g, '"').replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&lsquo;|&#x2018;/g, "\u2018").replace(/&rsquo;|&#x2019;/g, "\u2019")
+    .replace(/&ldquo;|&#x201C;/g, "\u201C").replace(/&rdquo;|&#x201D;/g, "\u201D");
+  t = t.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+  t = t.replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)));
+  return t;
+}
+
 export function stripMarkdown(text: string): string {
   if (!text) return "";
+  text = decodeEntities(text);
 
   let result = text;
 

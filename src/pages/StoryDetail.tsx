@@ -9,11 +9,11 @@ import { getBiasColor, getBiasLabel, timeAgo, getTopicColor } from "@/data/utils
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, AlertTriangle, Users, Shield, Building2, ExternalLink, Clock, CheckCircle2, BookOpen, ChevronDown, ChevronUp, Globe, Zap } from "lucide-react";
+import { ArrowLeft, Users, Shield, Building2, ExternalLink, Clock, CheckCircle2, BookOpen, ChevronDown, ChevronUp, Globe, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState, useEffect } from "react";
-import { stripMarkdown } from "@/lib/markdown";
+import { stripMarkdown, decodeEntities } from "@/lib/markdown";
 
 function estimateReadingTime(text: string): number {
   const words = text.split(/\s+/).length;
@@ -24,7 +24,6 @@ export default function StoryDetail() {
   const { id } = useParams();
   const [biasOpen, setBiasOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(true);
-  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
 
   const { data: story, isLoading } = useQuery({
     queryKey: ["story", id],
@@ -65,14 +64,6 @@ export default function StoryDetail() {
     }
     return () => { document.title = "Sachhh — Pakistan News Transparency"; };
   }, [story]);
-
-  const toggleCard = (i: number) => {
-    setExpandedCards((prev) => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-  };
 
   if (isLoading) {
     return (
@@ -332,12 +323,6 @@ export default function StoryDetail() {
         <div className="grid md:grid-cols-2 gap-3">
           {story.coverages.map((coverage, i) => {
             const source = getSource(coverage.sourceId) || getInternationalSource(coverage.sourceId);
-            const isExpanded = expandedCards.has(i);
-            const cleanedContent = coverage.fullContent ? stripMarkdown(coverage.fullContent) : "";
-            const cleanedSummary = coverage.summary ? stripMarkdown(coverage.summary) : "";
-            // Only show expandable content if it's meaningfully different from the summary
-            const hasContent = cleanedContent.length > 100 && cleanedContent.substring(0, 80) !== cleanedSummary.substring(0, 80);
-            const preview = cleanedContent.substring(0, 500);
 
             return (
               <motion.div
@@ -369,31 +354,12 @@ export default function StoryDetail() {
                         {(source as any).ownership}
                       </div>
                     )}
-                    <h3 className="font-medium text-sm leading-snug">{coverage.headline}</h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{coverage.summary ? stripMarkdown(coverage.summary) : ""}</p>
-
-                    {hasContent && (
-                      <div>
-                        {isExpanded ? (
-                          <div className="text-xs text-foreground leading-relaxed whitespace-pre-line break-words border-t border-border pt-2 mt-2">
-                            {cleanedContent}
-                          </div>
-                        ) : (
-                          preview && (
-                            <p className="text-xs text-muted-foreground/70 leading-relaxed border-t border-border pt-2 mt-2 line-clamp-4">
-                              {preview}...
-                            </p>
-                          )
-                        )}
-                        <button
-                          onClick={() => toggleCard(i)}
-                          className="text-xs text-primary hover:underline flex items-center gap-0.5 mt-1"
-                        >
-                          {isExpanded ? <><ChevronUp className="h-3 w-3" /> Show less</> : <><ChevronDown className="h-3 w-3" /> Read full article</>}
-                        </button>
-                      </div>
+                    <h3 className="font-medium text-sm leading-snug">{decodeEntities(coverage.headline)}</h3>
+                    {coverage.summary && (
+                      <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
+                        {stripMarkdown(coverage.summary)}
+                      </p>
                     )}
-
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[10px] text-muted-foreground">{timeAgo(coverage.publishedAt)}</span>
                       {coverage.url && coverage.url !== "#" && (

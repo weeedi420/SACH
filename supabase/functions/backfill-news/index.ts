@@ -86,6 +86,31 @@ function isInternational(domain: string): boolean {
   return !pkDomains.some(d => domain.includes(d));
 }
 
+function decodeHtmlEntities(text: string): string {
+  if (!text) return "";
+  let t = text
+    .replace(/&mdash;/g, " — ").replace(/&ndash;/g, "–")
+    .replace(/&nbsp;/g, " ").replace(/&apos;|&#039;/g, "'")
+    .replace(/&quot;/g, '"').replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&lsquo;|&#x2018;/g, "\u2018").replace(/&rsquo;|&#x2019;/g, "\u2019")
+    .replace(/&ldquo;|&#x201C;/g, "\u201C").replace(/&rdquo;|&#x201D;/g, "\u201D");
+  t = t.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+  t = t.replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)));
+  return t;
+}
+
+function cleanAttributionLine(text: string): string {
+  if (!text) return "";
+  let t = decodeHtmlEntities(text).trim();
+  // Strip "By Reuters - Apr 19, 2026" type lead-ins
+  t = t.replace(
+    /^(?:by\s+)?(?:Reuters|APP|AFP|AP|AP News?|Bloomberg|CNN|BBC|Associated Press|Xinhua)\s*[-–—|,:]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{4}\s*)?/i,
+    ""
+  );
+  return t.trim();
+}
+
 // Format date for GDELT: YYYYMMDDHHMMSS
 function gdeltDate(d: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
@@ -260,11 +285,12 @@ Deno.serve(async (req) => {
     const scraped: ScrapedArticle[] = articles.map(a => {
       let domain = "";
       try { domain = new URL(a.url).hostname.replace("www.",""); } catch {}
+      const cleanTitle = cleanAttributionLine(a.title);
       return {
         sourceId: domainToSourceId(domain),
-        title: a.title.trim(),
-        summary: a.title.trim(), // GDELT doesn't provide summaries — use title
-        content: a.title.trim(),
+        title: cleanTitle,
+        summary: cleanTitle, // GDELT doesn't provide summaries — use title
+        content: cleanTitle,
         url: a.url,
         isInternational: isInternational(domain),
         publishedAt: gdeltDateToIso(a.seendate),

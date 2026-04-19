@@ -211,15 +211,31 @@ function cleanBoilerplate(text: string): string {
 }
 
 function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&mdash;/g, " — ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#039;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\u00a0/g, " ");
+  if (!text) return "";
+  let t = text;
+  // Named entities
+  t = t.replace(/&mdash;/g, " — ")
+       .replace(/&ndash;/g, "–")
+       .replace(/&nbsp;/g, " ")
+       .replace(/&apos;|&#039;/g, "'")
+       .replace(/&quot;/g, '"')
+       .replace(/&amp;/g, "&")
+       .replace(/&lt;/g, "<")
+       .replace(/&gt;/g, ">")
+       .replace(/&lsquo;|&#x2018;/g, "\u2018")
+       .replace(/&rsquo;|&#x2019;/g, "\u2019")
+       .replace(/&ldquo;|&#x201C;/g, "\u201C")
+       .replace(/&rdquo;|&#x201D;/g, "\u201D")
+       .replace(/\u00a0/g, " ");
+  // Hex numeric entities: &#x27; &#x2019; etc.
+  t = t.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
+    String.fromCodePoint(parseInt(hex, 16))
+  );
+  // Decimal numeric entities: &#8217; &#160; etc.
+  t = t.replace(/&#([0-9]+);/g, (_, dec) =>
+    String.fromCodePoint(parseInt(dec, 10))
+  );
+  return t;
 }
 
 function stripLeadCaption(text: string): string {
@@ -238,7 +254,13 @@ function stripLeadCaption(text: string): string {
     /^(?:military vehicles|heavy machinery|international monetary fund logo|supporters|police officers|traders|people|smoke rises|rescue workers|palestinians|demonstrators)[^.]{0,240}(?:—|-|–)\s*(?:Reuters|APP|AFP|AP)\s*/i,
     ""
   );
-  t = t.replace(/^\s*(?:by\s+)?(?:Reuters|APP|AFP|AP)\s*/i, "");
+  // "By Reuters - Apr 19, 2026" / "Reuters | Apr 19, 2026" / "By AP News:" etc.
+  t = t.replace(
+    /^(?:by\s+)?(?:Reuters|APP|AFP|AP|AP News?|Bloomberg|CNN|BBC|Associated Press|Xinhua|DPA)\s*[-–—|,:]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{4}\s*)?/i,
+    ""
+  );
+  // Bare "Reuters" / "AFP" / "AP" at line start with nothing else
+  t = t.replace(/^\s*(?:Reuters|APP|AFP|AP|Bloomberg)\s*$/i, "");
   t = t.replace(/([.!?])([A-Z])/g, "$1 $2");
 
   return t.trim();
