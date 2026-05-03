@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BiasIndicator } from "@/components/news/BiasIndicator";
+import { timeAgo } from "@/data/utils";
 
 const PAKISTAN_REGIONS = new Set(["Punjab", "Sindh", "KPK", "Balochistan", "Islamabad", "National"]);
 const REGIONAL_REGIONS = new Set(["South Asia", "Middle East", "Central Asia"]);
@@ -48,19 +49,18 @@ const Index = () => {
 
   const allStories = stories;
 
-  // Main feed EXCLUDES sports (sports has its own tab)
-  const mainFeedStories = useMemo(() => 
+  const mainFeedStories = useMemo(() =>
     allStories.filter(s => categorizeStory(s) !== "sports"),
     [allStories]
   );
 
   const filtered = useMemo(() => {
-    const base = activeSection === "sports" 
+    const base = activeSection === "sports"
       ? allStories.filter(s => categorizeStory(s) === "sports")
-      : activeSection === "all" 
+      : activeSection === "all"
         ? mainFeedStories
         : mainFeedStories.filter(s => categorizeStory(s) === activeSection);
-    
+
     return base.filter(s => {
       if (selectedTopic !== "All" && s.topic !== selectedTopic) return false;
       if (selectedRegion !== "All" && s.region !== selectedRegion) return false;
@@ -70,16 +70,14 @@ const Index = () => {
 
   const visibleStories = useMemo(() => {
     if (filtered.length > 0) return filtered;
-
     const filtersApplied = selectedTopic !== "All" || selectedRegion !== "All" || activeSection !== "all";
     if (!filtersApplied) return filtered;
-
     return mainFeedStories.length > 0 ? mainFeedStories : allStories;
   }, [filtered, selectedTopic, selectedRegion, activeSection, mainFeedStories, allStories]);
 
   const sectionCounts = useMemo(() => {
     const counts = { pakistan: 0, regional: 0, world: 0, sports: 0 };
-    allStories.forEach(s => { 
+    allStories.forEach(s => {
       const cat = categorizeStory(s);
       if (cat in counts) counts[cat as keyof typeof counts]++;
     });
@@ -89,20 +87,12 @@ const Index = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     toast.info("Fetching latest news...");
-    
-    // Fire scraper but don't wait forever
     const scrapePromise = supabase.functions.invoke("scrape-news").catch(() => null);
     const timeout = new Promise(resolve => setTimeout(resolve, 15000));
-    
-    // Wait max 15s for scraper, then refetch from DB regardless
     await Promise.race([scrapePromise, timeout]);
-    
     try {
       await queryClient.invalidateQueries({ queryKey: ["stories"] });
-      const freshStories = await queryClient.fetchQuery({
-        queryKey: ["stories"],
-        queryFn: fetchStories,
-      });
+      const freshStories = await queryClient.fetchQuery({ queryKey: ["stories"], queryFn: fetchStories });
       toast.success(`Feed updated (${freshStories.length} stories)`);
     } catch {
       toast.error("Could not load stories");
@@ -119,15 +109,32 @@ const Index = () => {
     { key: "sports", label: "Sports", icon: <Trophy className="h-3 w-3" />, count: sectionCounts.sports },
   ];
 
+  // Top stories for the hero section (only shown in "all" tab)
+  const topStories = useMemo(() =>
+    activeSection === "all" && !isLoading
+      ? mainFeedStories.filter(s => (s.importanceScore || 0) >= 8 && s.coverages.length >= 2).slice(0, 5)
+      : [],
+    [mainFeedStories, activeSection, isLoading]
+  );
+
+  // Latest feed excludes stories already in top section
+  const topStoryIds = useMemo(() => new Set(topStories.map(s => s.id)), [topStories]);
+  const feedStories = useMemo(() =>
+    activeSection === "all"
+      ? visibleStories.filter(s => !topStoryIds.has(s.id))
+      : visibleStories,
+    [visibleStories, topStoryIds, activeSection]
+  );
+
   return (
     <main className="container py-6 space-y-5 max-w-3xl mx-auto">
-      {/* Header + Refresh */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="font-bold text-lg">
           {activeSection === "sports" ? "Sports" : "News Feed"}
         </h1>
         <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs" disabled={isRefreshing} onClick={handleRefresh}>
-          <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
           {isRefreshing ? "Updating..." : "Refresh"}
         </Button>
       </div>
@@ -156,64 +163,104 @@ const Index = () => {
         onRegionChange={setSelectedRegion}
       />
 
-      {/* Top Stories - only in "all" tab, excludes sports */}
-      {activeSection === "all" && !isLoading && (() => {
-        const topStories = mainFeedStories
-          .filter(s => (s.importanceScore || 0) >= 8 && s.coverages.length >= 2)
-          .slice(0, 5);
-        if (topStories.length === 0) return null;
+      {/* ── Top Stories ── */}
+      {topStories.length > 0 && (() => {
+        const [hero, ...rest] = topStories;
         return (
           <section>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <Zap className="h-4 w-4 text-primary" />
               <h2 className="font-semibold text-sm">Top Stories</h2>
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {topStories.map((story, i) => (
-                <motion.div key={story.id} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
-                  <Link to={`/story/${story.id}`}>
-                    <Card className="border-primary/20 bg-primary/[0.03] hover:shadow-sm transition-all cursor-pointer">
-                      <CardContent className="p-3 space-y-1.5">
-                        <span className="text-[10px] font-medium text-primary">{story.topic} · {story.region}</span>
-                        <h3 className="font-semibold text-xs leading-snug line-clamp-2">{story.title}</h3>
-                        {story.aiSummary && <p className="text-[10px] text-muted-foreground line-clamp-2">{story.aiSummary}</p>}
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground">{story.coverages.length} sources</span>
+
+            {/* Hero card */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+              <Link to={`/story/${hero.id}`}>
+                <Card className="mb-3 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer">
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">{hero.topic}</span>
+                      <span className="text-[11px] text-muted-foreground">{hero.region}</span>
+                      {hero.isBreaking && (
+                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wide flex items-center gap-0.5">
+                          <Zap className="h-3 w-3" /> Breaking
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-bold text-base leading-snug line-clamp-3">{hero.title}</h3>
+                    {hero.aiSummary && (
+                      <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">{hero.aiSummary}</p>
+                    )}
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <span className="text-xs text-muted-foreground font-medium">{hero.coverages.length} sources</span>
+                      <span className="text-xs text-muted-foreground">{timeAgo(hero.publishedAt)}</span>
+                      <BiasIndicator distribution={hero.biasDistribution} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            </motion.div>
+
+            {/* 2-column grid for remaining top stories */}
+            {rest.length > 0 && (
+              <div className="grid grid-cols-2 gap-2.5">
+                {rest.map((story, i) => (
+                  <motion.div
+                    key={story.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 + i * 0.05 }}
+                  >
+                    <Link to={`/story/${story.id}`}>
+                      <Card className="h-full hover:shadow-sm hover:border-primary/30 transition-all cursor-pointer">
+                        <CardContent className="p-3 space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">{story.topic}</span>
+                            <span className="text-[10px] text-muted-foreground">{story.region}</span>
+                          </div>
+                          <h3 className="font-semibold text-sm leading-snug line-clamp-3">{story.title}</h3>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-0.5">
+                            <span>{story.coverages.length} sources</span>
+                            <span>{timeAgo(story.publishedAt)}</span>
+                          </div>
                           <BiasIndicator distribution={story.biasDistribution} />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </section>
         );
       })()}
 
-      {/* Feed */}
+      {/* ── Latest Feed ── */}
       <section>
-        <div className="flex items-center gap-2 mb-2">
-          {activeSection === "sports" ? <Trophy className="h-4 w-4 text-muted-foreground" /> : <Newspaper className="h-4 w-4 text-muted-foreground" />}
+        <div className="flex items-center gap-2 mb-3">
+          {activeSection === "sports"
+            ? <Trophy className="h-4 w-4 text-muted-foreground" />
+            : <Newspaper className="h-4 w-4 text-muted-foreground" />}
           <h2 className="font-semibold text-sm">
-            {activeSection === "pakistan" ? "Pakistan News" 
-              : activeSection === "regional" ? "Regional News" 
+            {activeSection === "pakistan" ? "Pakistan News"
+              : activeSection === "regional" ? "Regional News"
               : activeSection === "world" ? "World News"
               : activeSection === "sports" ? "Sports News"
               : "Latest Stories"}
           </h2>
-          <span className="text-xs text-muted-foreground">({visibleStories.length})</span>
+          <span className="text-xs text-muted-foreground">({feedStories.length})</span>
         </div>
+
         {isLoading ? (
           <div className="space-y-3">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-lg" />)}
           </div>
         ) : (
           <div className="space-y-2.5">
-            {visibleStories.map((story, i) => (
+            {feedStories.map((story, i) => (
               <StoryCard key={story.id} story={story} index={i} />
             ))}
-            {visibleStories.length === 0 && (
+            {feedStories.length === 0 && topStories.length === 0 && (
               <div className="text-sm text-muted-foreground text-center py-12 space-y-2">
                 <p>No stories available yet.</p>
                 <p className="text-xs">Try Refresh in a moment if a scrape is still finishing.</p>
@@ -221,7 +268,7 @@ const Index = () => {
             )}
             {filtered.length === 0 && visibleStories.length > 0 && (
               <p className="text-xs text-muted-foreground text-center py-2">
-                No stories matched the current filters, so showing the latest live feed instead.
+                No stories matched the current filters — showing the latest feed instead.
               </p>
             )}
           </div>

@@ -6,7 +6,7 @@ import { NewsStory } from "@/data/types";
 import { getSource } from "@/data/sources";
 import { getInternationalSource } from "@/data/international-sources";
 import { timeAgo, getTopicColor, getBlindspotType } from "@/data/utils";
-import { TrendingUp, EyeOff, Zap, Globe, Bookmark, Clock } from "lucide-react";
+import { TrendingUp, EyeOff, Zap, Globe, Bookmark } from "lucide-react";
 import { motion } from "framer-motion";
 import { stripMarkdown } from "@/lib/markdown";
 import { useBookmarks } from "@/hooks/useBookmarks";
@@ -22,14 +22,9 @@ function getOutletNames(story: NewsStory): string {
     .map(c => (getSource(c.sourceId) || getInternationalSource(c.sourceId))?.name)
     .filter(Boolean) as string[];
   const unique = [...new Set(names)];
-  if (unique.length === 0) return `${story.coverages.length} sources`;
+  if (unique.length === 0) return `${story.coverages.length} source${story.coverages.length !== 1 ? "s" : ""}`;
   if (unique.length <= 3) return unique.join(" · ");
-  return `${unique.slice(0, 2).join(" · ")} +${unique.length - 2}`;
-}
-
-function getReadTime(story: NewsStory): string {
-  const mins = Math.max(1, Math.round(story.coverages.length * 0.75));
-  return `~${mins} min read`;
+  return `${unique.slice(0, 2).join(" · ")} +${unique.length - 2} more`;
 }
 
 export function StoryCard({ story, index }: StoryCardProps) {
@@ -38,26 +33,32 @@ export function StoryCard({ story, index }: StoryCardProps) {
   const { toggleBookmark, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(story.id);
 
+  const previewText = story.aiSummary || stripMarkdown(story.coverages[0]?.summary || "");
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.3 }}
+      transition={{ delay: index * 0.03, duration: 0.25 }}
     >
       <Link to={`/story/${story.id}`}>
         <Card className="group hover:shadow-md hover:border-primary/30 transition-all cursor-pointer">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
+
+              {/* Main content */}
               <div className="flex-1 min-w-0 space-y-2">
+
+                {/* Meta row */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="secondary" className={`text-[10px] ${getTopicColor(story.topic)}`}>
+                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${getTopicColor(story.topic)}`}>
                     {story.topic}
                   </Badge>
                   <span className="text-[11px] text-muted-foreground">{story.region}</span>
                   {story.isBreaking && (
-                    <Badge variant="destructive" className="text-[10px] gap-0.5">
-                      <Zap className="h-3 w-3" /> BREAKING
-                    </Badge>
+                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-red-500 uppercase tracking-wide">
+                      <Zap className="h-3 w-3" /> Breaking
+                    </span>
                   )}
                   {story.isTrending && !story.isBreaking && (
                     <span className="flex items-center gap-0.5 text-[10px] text-primary font-medium">
@@ -65,45 +66,41 @@ export function StoryCard({ story, index }: StoryCardProps) {
                     </span>
                   )}
                   {story.coverages.some(c => c.isInternational) && (
-                    <span className="flex items-center gap-0.5 text-[10px] text-accent-foreground font-medium">
-                      <Globe className="h-3 w-3" /> Global
+                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                      <Globe className="h-3 w-3" /> International
                     </span>
                   )}
                   {blindspot && (
-                    <Badge variant="destructive" className="text-[10px] gap-0.5">
+                    <Badge variant="outline" className="text-[10px] gap-0.5 border-orange-300 text-orange-600">
                       <EyeOff className="h-3 w-3" /> {blindspot}
                     </Badge>
                   )}
                 </div>
 
-                <h3 className="font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                {/* Title */}
+                <h3 className="font-semibold text-[15px] leading-snug group-hover:text-primary transition-colors line-clamp-2">
                   {story.title}
                 </h3>
 
-                {story.coverages[0]?.summary && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {stripMarkdown(story.coverages[0].summary)}
+                {/* Preview text */}
+                {previewText && (
+                  <p className="text-[13px] text-muted-foreground leading-relaxed line-clamp-2">
+                    {previewText}
                   </p>
                 )}
 
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+                {/* Source + time row */}
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap pt-0.5">
                   <span className="font-medium text-foreground/70">{getOutletNames(story)}</span>
-                  <span className="flex items-center gap-0.5">
-                    <Clock className="h-3 w-3" />{getReadTime(story)}
-                  </span>
+                  <span className="opacity-50">·</span>
                   <span>{timeAgo(story.publishedAt)}</span>
                 </div>
 
+                {/* Bias bar */}
                 <BiasIndicator distribution={story.biasDistribution} />
               </div>
-              {story.imageUrl && (
-                <img
-                  src={story.imageUrl}
-                  alt=""
-                  className="shrink-0 w-20 h-16 object-cover rounded-md bg-muted"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
+
+              {/* Bookmark */}
               {user && (
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleBookmark(story.id); }}
@@ -113,6 +110,7 @@ export function StoryCard({ story, index }: StoryCardProps) {
                   <Bookmark className={`h-4 w-4 ${bookmarked ? "text-primary fill-primary" : "text-muted-foreground"}`} />
                 </button>
               )}
+
             </div>
           </CardContent>
         </Card>

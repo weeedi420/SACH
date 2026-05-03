@@ -355,11 +355,16 @@ export default function StoryDetail() {
                       </div>
                     )}
                     <h3 className="font-medium text-sm leading-snug">{decodeEntities(coverage.headline)}</h3>
-                    {coverage.summary && (
-                      <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
-                        {stripMarkdown(coverage.summary)}
-                      </p>
-                    )}
+                    {(coverage.summary || coverage.fullContent) && (() => {
+                      const body = coverage.fullContent && coverage.fullContent.length > (coverage.summary?.length ?? 0) + 100
+                        ? coverage.fullContent
+                        : coverage.summary;
+                      return (
+                        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-[8]">
+                          {stripMarkdown(body || "")}
+                        </p>
+                      );
+                    })()}
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[10px] text-muted-foreground">{timeAgo(coverage.publishedAt)}</span>
                       {coverage.url && coverage.url !== "#" && (

@@ -15,21 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Supabase CLI
-        run: |
-          curl -fsSL https://github.com/supabase/cli/releases/download/v2.90.0/supabase_2.90.0_linux_amd64.deb \
-            -o /tmp/supabase.deb
-          sudo dpkg -i /tmp/supabase.deb
-          supabase --version
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       - name: Deploy edge functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          supabase functions deploy scrape-news    --project-ref "$PROJECT_REF" --no-verify-jwt
-          supabase functions deploy backfill-news  --project-ref "$PROJECT_REF" --no-verify-jwt
-          supabase functions deploy news-chat      --project-ref "$PROJECT_REF"
-          supabase functions deploy extract-claims --project-ref "$PROJECT_REF"
-          supabase functions deploy self-heal      --project-ref "$PROJECT_REF"
+          supabase functions deploy scrape-news    --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --no-verify-jwt
+          supabase functions deploy backfill-news  --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --no-verify-jwt
+          supabase functions deploy news-chat      --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase functions deploy extract-claims --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase functions deploy self-heal      --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase functions deploy send-digest    --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --no-verify-jwt
           echo "All functions deployed successfully"

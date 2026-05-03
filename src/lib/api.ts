@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { NewsStory, ArticleCoverage, Claim } from "@/data/types";
+import type { NewsStory, Claim } from "@/data/types";
 
 interface DbStory {
   id: string;
@@ -66,6 +66,22 @@ function deduplicateCoverages(coverages: DbCoverage[]): DbCoverage[] {
   );
 }
 
+function normalizeTitle(t: string): string {
+  if (!t) return t;
+  return t
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&amp;/g, "&").replace(/&apos;|&#039;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    // Fix space before punctuation: "Imran , Bushra" → "Imran, Bushra"
+    .replace(/\s+([,;:!?])/g, "$1")
+    // Fix number formatting: "Rs100 , 000" → "Rs100,000"
+    .replace(/(\d)\s*,\s*(\d)/g, "$1,$2")
+    // Strip trailing source attribution: "…case — Reuters" or "…case | Dawn"
+    .replace(/\s*[-–—|]\s*(?:Reuters|AFP|AP|BBC|CNN|Dawn|Geo|ARY|APP|Bloomberg|Xinhua|DPA)\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function mapDbToStory(row: DbStory, coverages: DbCoverage[]): NewsStory {
   const dedupedCoverages = deduplicateCoverages(coverages);
   const effectivePublishedAt = getLatestDateString(
@@ -77,26 +93,37 @@ function mapDbToStory(row: DbStory, coverages: DbCoverage[]): NewsStory {
     t
       .replace(/<!\[CDATA\[/g, "")
       .replace(/\]\]>/g, "")
-      .replace(/<[^>]+>/g, "")
+      .replace(/<[^>]+>/g, " ")
       .replace(/\r\n\s*\t+/g, " ")
+      // Fix space before punctuation: "word , word" → "word, word"
+      .replace(/\s+([,;:!?])/g, "$1")
+      // Fix number formatting: "100 , 000" → "100,000"
+      .replace(/(\d)\s*,\s*(\d)/g, "$1,$2")
       .replace(/\s{2,}/g, " ")
       .trim();
 
   return {
     id: row.id,
-    title: row.title,
+    title: normalizeTitle(row.title),
     titleUrdu: row.title_urdu || undefined,
     topic: row.topic as any,
     region: row.region as any,
-    coverages: dedupedCoverages.map((coverage) => ({
-      sourceId: coverage.source_id,
-      headline: cleanText(coverage.headline),
-      summary: cleanText(coverage.summary || ""),
-      fullContent: coverage.full_content || undefined,
-      url: coverage.url || "#",
-      publishedAt: coverage.published_at || effectivePublishedAt,
-      isInternational: coverage.is_international || false,
-    })),
+    coverages: dedupedCoverages.map((coverage) => {
+      const headline = cleanText(coverage.headline);
+      const summary = cleanText(coverage.summary || "");
+      const full = coverage.full_content || undefined;
+      // Prefer fullContent when it's meaningfully longer than the RSS summary
+      const bestSummary = full && full.length > summary.length + 100 ? full : summary;
+      return {
+        sourceId: coverage.source_id,
+        headline,
+        summary: bestSummary,
+        fullContent: full,
+        url: coverage.url || "#",
+        publishedAt: coverage.published_at || effectivePublishedAt,
+        isInternational: coverage.is_international || false,
+      };
+    }),
     biasDistribution: row.bias_distribution || { establishment: 0, government: 0, opposition: 0, independent: 0 },
     isTrending: row.is_trending,
     publishedAt: effectivePublishedAt,
@@ -157,10 +184,9 @@ export async function fetchStories(): Promise<NewsStory[]> {
 
   const stories = storiesData.map((story: any) => mapDbToStory(story, coveragesByStory[story.id] || []));
 
-  // Show all multi-source stories — 2+ sources always, 3+ rank higher via coverage score
-  const toProcess = stories.filter(s => s.coverages.length >= 2);
-
-  const processedStories = processFeedStories(toProcess.length > 0 ? toProcess : stories);
+  // Pass all stories — scoring heavily weights multi-source (log coverage bonus + tier bonus)
+  // so 3+ source stories naturally float to the top without hard filtering
+  const processedStories = processFeedStories(stories);
   if (processedStories.length > 0) return processedStories;
 
   if (stories.length > 0) {
@@ -196,9 +222,10 @@ function countTier1Sources(coverages: Array<{ sourceId: string }>): number {
 
 function isPakistanStory(story: NewsStory): boolean {
   const region = (story.region || "").toLowerCase();
-  return ["pakistan", "national", "punjab", "sindh", "kpk", "balochistan", "islamabad", "regional"].some((token) =>
-    region.includes(token)
-  );
+  if (["pakistan", "national", "punjab", "sindh", "kpk", "balochistan", "islamabad", "regional"].some((t) => region.includes(t))) return true;
+  // Also count South Asia / Global stories whose title directly references Pakistan
+  if (["south", "asia", "global", "world"].some((t) => region.includes(t)) && story.title.toLowerCase().includes("pakistan")) return true;
+  return false;
 }
 
 const GALLERY_PATTERNS = [
@@ -217,25 +244,6 @@ const ENTERTAINMENT_PATTERNS = [
   /\b(olivia attwood|johnny depp|peaky blinders|xo kitty)\b/i,
 ];
 
-function normalizeTitleKeywords(title: string): string[] {
-  return title
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .replace(/\b(pakistan|iran|us|trump|shehbaz|khawaja|dawn|express|geo|ary)\b/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 3 && !["the", "and", "for", "with", "from", "has", "said", "that", "this", "been"].includes(word))
-    .sort()
-    .slice(0, 8);
-}
-
-function jaccardSimilarity(a: string[], b: string[]): number {
-  const setA = new Set(a);
-  const setB = new Set(b);
-  const intersection = Array.from(setA).filter((value) => setB.has(value)).length;
-  const union = setA.size + setB.size - intersection;
-  return union > 0 ? intersection / union : 0;
-}
 
 function getStoryFreshnessTimestamp(story: Pick<NewsStory, "publishedAt" | "coverages">): number {
   return Math.max(
@@ -244,80 +252,22 @@ function getStoryFreshnessTimestamp(story: Pick<NewsStory, "publishedAt" | "cove
   );
 }
 
-function mergeStoryCoverages(stories: NewsStory[]): ArticleCoverage[] {
-  const mergedBySource = new Map<string, ArticleCoverage>();
-
-  stories.forEach((story) => {
-    story.coverages.forEach((coverage) => {
-      const existing = mergedBySource.get(coverage.sourceId);
-      if (!existing || toTimestamp(coverage.publishedAt) > toTimestamp(existing.publishedAt)) {
-        mergedBySource.set(coverage.sourceId, coverage);
-      }
-    });
-  });
-
-  return Array.from(mergedBySource.values()).sort(
-    (a, b) => toTimestamp(b.publishedAt) - toTimestamp(a.publishedAt)
-  );
-}
-
 function processFeedStories(stories: NewsStory[]): NewsStory[] {
   const now = Date.now();
 
+  // Filter — no re-clustering here. The scraper already clustered using entity matching.
+  // Re-clustering on the frontend was causing wrong titles + unrelated story merges.
   const candidates = stories.filter((story) => {
     if ((story.importanceScore || 0) < 2) return false;
-    if (GALLERY_PATTERNS.some((pattern) => pattern.test(story.title))) return false;
-    if (ENTERTAINMENT_PATTERNS.some((pattern) => pattern.test(story.title))) return false;
+    if (GALLERY_PATTERNS.some((p) => p.test(story.title))) return false;
+    if (ENTERTAINMENT_PATTERNS.some((p) => p.test(story.title))) return false;
+    // Keep only stories with a Pakistani angle OR a Tier-1 Pakistani source
+    if (!isPakistanStory(story) && countTier1Sources(story.coverages) === 0) return false;
     return true;
   });
 
-  const groups: Array<{ primary: NewsStory; keywords: string[]; members: NewsStory[] }> = [];
-
-  for (const story of candidates) {
-    const keywords = normalizeTitleKeywords(story.title);
-    let merged = false;
-
-    for (const group of groups) {
-      const similarity = jaccardSimilarity(keywords, group.keywords);
-      const timeDiffHours = Math.abs(getStoryFreshnessTimestamp(story) - getStoryFreshnessTimestamp(group.primary)) / (1000 * 60 * 60);
-
-      if (similarity > 0.65 && timeDiffHours < 72) {
-        group.members.push(story);
-
-        const currentTier1 = countTier1Sources(group.primary.coverages);
-        const nextTier1 = countTier1Sources(story.coverages);
-        if (nextTier1 > currentTier1 || (nextTier1 === currentTier1 && story.coverages.length > group.primary.coverages.length)) {
-          group.primary = story;
-        }
-
-        merged = true;
-        break;
-      }
-    }
-
-    if (!merged) {
-      groups.push({ primary: story, keywords, members: [story] });
-    }
-  }
-
-  const mergedStories = groups.map((group) => {
-    const mergedCoverages = mergeStoryCoverages(group.members);
-    const mergedPublishedAt = getLatestDateString(
-      [
-        ...group.members.map((story) => story.publishedAt),
-        ...mergedCoverages.map((coverage) => coverage.publishedAt),
-      ],
-      group.primary.publishedAt
-    );
-
-    return {
-      ...group.primary,
-      coverages: mergedCoverages,
-      publishedAt: mergedPublishedAt,
-    };
-  });
-
-  mergedStories.sort((a, b) => {
+  // Rank by a composite score — importance × 6 + recency + coverage depth + source tier
+  return [...candidates].sort((a, b) => {
     const hoursA = (now - getStoryFreshnessTimestamp(a)) / (1000 * 60 * 60);
     const hoursB = (now - getStoryFreshnessTimestamp(b)) / (1000 * 60 * 60);
 
@@ -338,8 +288,6 @@ function processFeedStories(stories: NewsStory[]): NewsStory[] {
 
     return scoreB - scoreA;
   });
-
-  return mergedStories;
 }
 
 export async function fetchStory(id: string): Promise<NewsStory | null> {

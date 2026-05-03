@@ -69,6 +69,34 @@ interface ScrapedArticle {
   content: string;
   url: string;
   isInternational: boolean;
+  imageUrl?: string;
+}
+
+// Extract the best image URL from an RSS item's XML block
+function extractRssImage(itemXml: string): string | undefined {
+  // <enclosure url="..." type="image/..."> — most common (Dawn, ARY, Geo)
+  const enclosure = itemXml.match(/<enclosure[^>]+url="([^"]+)"[^>]*type="image[^"]*"/i)
+    || itemXml.match(/<enclosure[^>]+type="image[^"]*"[^>]*url="([^"]+)"/i);
+  if (enclosure?.[1]) return enclosure[1];
+
+  // <media:content url="..." medium="image"> — BBC, Reuters, AJ
+  const mediaContent = itemXml.match(/<media:content[^>]+url="([^"]+)"[^>]*medium="image"/i)
+    || itemXml.match(/<media:content[^>]+url="([^"]+)"/i);
+  if (mediaContent?.[1] && /\.(jpg|jpeg|png|webp)/i.test(mediaContent[1])) return mediaContent[1];
+
+  // <media:thumbnail url="..."> — Al Jazeera, some others
+  const thumbnail = itemXml.match(/<media:thumbnail[^>]+url="([^"]+)"/i);
+  if (thumbnail?.[1]) return thumbnail[1];
+
+  // <image><url>...</url></image> inside item
+  const imageTag = itemXml.match(/<image[^>]*>\s*<url>([^<]+)<\/url>/i);
+  if (imageTag?.[1]) return imageTag[1];
+
+  // <description> HTML containing <img src="..."> — Dawn sometimes embeds this
+  const imgInDesc = itemXml.match(/<description[^>]*>[\s\S]*?<img[^>]+src="([^"]+\.(jpg|jpeg|png|webp)[^"]*)"/i);
+  if (imgInDesc?.[1]) return imgInDesc[1];
+
+  return undefined;
 }
 
 type StoryCategory = "geopolitics" | "economy" | "policy" | "security" | "conflict" | "sports" | "entertainment" | "other";
@@ -706,7 +734,8 @@ async function fetchRssArticles(sourceId: string, feedUrl: string, source: typeo
       if (!title || title.length < 20 || isJunkTitle(title)) continue;
       if (link && isVideoUrl(link)) continue;
       const cleanDesc = desc.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/\r\n\s*\t+/g, " ").replace(/\s{2,}/g, " ").trim();
-      items.push({ sourceId, title, summary: cleanDesc.substring(0, 500) || title, content: cleanDesc, url: link, isInternational: source.international });
+      const imageUrl = extractRssImage(x);
+      items.push({ sourceId, title, summary: cleanDesc.substring(0, 500) || title, content: cleanDesc, url: link, isInternational: source.international, imageUrl });
     }
     if (items.length === 0) {
       const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
@@ -1264,6 +1293,9 @@ Deno.serve(async (req) => {
         : category === "sports" ? "Sports"
         : topic;
 
+      // Pick best image from the group — prefer first article that has one
+      const bestImage = articles.find(a => a.imageUrl)?.imageUrl || null;
+
       const { data: story, error: storyErr } = await supabase.from("stories").insert({
         title: headline, topic: topicFromCategory, region,
         is_trending: sourceIds.length >= 3,
@@ -1271,6 +1303,7 @@ Deno.serve(async (req) => {
         published_at: nowIso,
         importance_score: Math.round(importanceScore),
         is_breaking: sourceIds.length >= 4 || importanceScore >= 9,
+        image_url: bestImage,
       }).select("id").single();
 
       if (storyErr) { errors.push(`Story: ${storyErr.message}`); continue; }
